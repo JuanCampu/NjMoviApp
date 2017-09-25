@@ -11,7 +11,9 @@ var port = process.env.PORT || 3000;
 server.listen(port, function () {
   console.log('Server listening at port %d', port);
 });
-
+io.configure(function() {
+  io.set('transports', ['websocket']);
+});
 // Routing
 app.use(express.static(path.join(__dirname, 'public')));
 
