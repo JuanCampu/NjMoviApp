@@ -1,4 +1,5 @@
 $(function() {
+  console.log("paso por acá 2");
   var FADE_TIME = 150; // ms
   var TYPING_TIMER_LENGTH = 400; // ms
   var COLORS = [
