@@ -1,4 +1,6 @@
 // Setup basic express server
+
+console.log("paso por acá");
 var express = require('express');
 var app = express();
 var path = require('path');
