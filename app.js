@@ -1,78 +1,81 @@
-// Setup basic express server
+/**
+ * Module dependencies.
+ */
 
-console.log("paso por acá");
-var express = require('express');
-var app = express();
-var path = require('path');
-var server = require('http').createServer(app);
-var io = require('socket.io')(server);
-var port = process.env.PORT || 3000;
+var express = require('express')
+, stylus = require('stylus')
+, nib = require('nib')
+, sio = require('socket.io');              
+var port = process.env.PORT || 3000;   
 
-server.listen(port, function () {
-  console.log('Server listening at port %d', port);
+/**
+* App.
+*/
+
+var app = express.createServer();
+
+/**
+* App configuration.
+*/
+
+app.configure(function () {
+app.use(stylus.middleware({ src: __dirname + '/public', compile: compile }));
+app.use(express.static(__dirname + '/public'));
+app.set('views', __dirname);
+app.set('view engine', 'jade');
+
+function compile (str, path) {
+  return stylus(str)
+    .set('filename', path)
+    .use(nib());
+};
 });
 
-// Routing
-app.use(express.static(path.join(__dirname, 'public')));
+/**
+* App routes.
+*/
 
-// Chatroom
+app.get('/', function (req, res) {
+res.render('index', { layout: false });
+});
 
-var numUsers = 0;
+/**
+* App listen.
+*/
 
-io.on('connection', function (socket) {
-  var addedUser = false;
+app.listen(process.env.port, function ()  {
+var addr = app.address();
+console.log('   app listening on http://' + addr.address + ':' + addr.port);
+});
 
-  // when the client emits 'new message', this listens and executes
-  socket.on('new message', function (data) {
-    // we tell the client to execute 'new message'
-    socket.broadcast.emit('new message', {
-      username: socket.username,
-      message: data
-    });
-  });
+/**
+* Socket.IO server (single process only)
+*/
 
-  // when the client emits 'add user', this listens and executes
-  socket.on('add user', function (username) {
-    if (addedUser) return;
+var io = sio.listen(app)
+, nicknames = {};
 
-    // we store the username in the socket session for this client
-    socket.username = username;
-    ++numUsers;
-    addedUser = true;
-    socket.emit('login', {
-      numUsers: numUsers
-    });
-    // echo globally (all clients) that a person has connected
-    socket.broadcast.emit('user joined', {
-      username: socket.username,
-      numUsers: numUsers
-    });
-  });
+io.sockets.on('connection', function (socket) {
+socket.on('user message', function (msg) {
+  socket.broadcast.emit('user message', socket.nickname, msg);
+});
 
-  // when the client emits 'typing', we broadcast it to others
-  socket.on('typing', function () {
-    socket.broadcast.emit('typing', {
-      username: socket.username
-    });
-  });
+socket.on('nickname', function (nick, fn) {
+  if (nicknames[nick]) {
+    fn(true);
+  } else {
+    fn(false);
+    nicknames[nick] = socket.nickname = nick;
+    socket.broadcast.emit('announcement', nick + ' connected');
+    io.sockets.emit('nicknames', nicknames);
+  }
+});
 
-  // when the client emits 'stop typing', we broadcast it to others
-  socket.on('stop typing', function () {
-    socket.broadcast.emit('stop typing', {
-      username: socket.username
-    });
-  });
+socket.on('disconnect', function () {
+  if (!socket.nickname) return;
 
-  // when the user disconnects.. perform this
-  socket.on('disconnect', function () {
-    if (addedUser) {
-      --numUsers;
-
-      // echo globally that this client has left
-      socket.broadcast.emit('user left', {
-        username: socket.username,
-        numUsers: numUsers
-      });
-    }
-  });
+  delete nicknames[socket.nickname];
+  socket.broadcast.emit('announcement', socket.nickname + ' disconnected');
+  socket.broadcast.emit('nicknames', nicknames);
+});
 });
